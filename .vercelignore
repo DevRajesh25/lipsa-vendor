@@ -1,0 +1,7 @@
+functions/
+*.md
+.env.local
+.git/
+node_modules/
+.next/
+.vscode/
