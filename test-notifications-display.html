@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Notifications Display</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .notification { 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+        }
+        .unread { background-color: #f0f8ff; }
+        .read { background-color: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Notification System Test</h1>
+    <div id="notifications"></div>
+    
+    <script>
+        async function testNotifications() {
+            try {
+                // Test fetching notifications for the test vendor
+                const response = await fetch('/api/admin/notifications', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    document.getElementById('notifications').innerHTML = 
+                        '<p style="color: green;">✅ Notifications API is accessible</p>';
+                } else {
+                    document.getElementById('notifications').innerHTML = 
+                        '<p style="color: red;">❌ Notifications API returned error: ' + response.status + '</p>';
+                }
+            } catch (error) {
+                document.getElementById('notifications').innerHTML = 
+                    '<p style="color: red;">❌ Error accessing notifications: ' + error.message + '</p>';
+            }
+        }
+        
+        testNotifications();
+    </script>
+</body>
+</html>

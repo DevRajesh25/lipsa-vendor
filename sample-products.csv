@@ -1,0 +1,6 @@
+name,description,price,stock,categorySlug,imageUrl
+Baby Toy,Soft toy for kids,299,50,baby-essentials,https://example.com/images/toy.jpg
+Hair Clip,Stylish clip,99,100,health-beauty,https://example.com/images/clip.jpg
+Kitchen Knife,Steel knife set,499,30,kitchen-accessories,https://example.com/images/knife.jpg
+Home Decor,Beautiful wall art,799,25,home-essentials,https://example.com/images/decor.jpg
+Wireless Headphones,Bluetooth headphones,1299,40,electronics,https://example.com/images/headphones.jpg
