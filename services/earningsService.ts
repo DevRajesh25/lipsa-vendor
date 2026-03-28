@@ -9,12 +9,12 @@ import {
   getDoc,
   orderBy,
   limit,
-  Timestamp,
-  getCountFromServer
+  Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Order, PayoutRequest } from '@/lib/types';
 import { getVendorStats, updateStatsOnPayoutRequested } from './vendorStatsService';
+import { getPlatformSettings } from './settingsService';
 
 export interface VendorEarnings {
   totalEarnings: number;
@@ -44,29 +44,81 @@ export interface PayoutRequestInput {
   };
 }
 
-// Calculate platform commission (default 10%)
-export const calculateCommission = (totalAmount: number, commissionRate: number = 0.10): number => {
+// Calculate platform commission using dynamic rate from settings
+export const calculateCommission = async (totalAmount: number): Promise<number> => {
+  const settings = await getPlatformSettings();
+  const commissionRate = settings.commissionPercentage / 100;
   return Math.round(totalAmount * commissionRate * 100) / 100;
 };
 
-// Calculate vendor earnings after commission
-export const calculateVendorEarnings = (totalAmount: number, commissionRate: number = 0.10): number => {
-  const commission = calculateCommission(totalAmount, commissionRate);
+// Calculate vendor earnings after commission using dynamic rate from settings
+export const calculateVendorEarnings = async (totalAmount: number): Promise<number> => {
+  const commission = await calculateCommission(totalAmount);
   return Math.round((totalAmount - commission) * 100) / 100;
 };
 
-// Get vendor earnings summary - OPTIMIZED using stats document
+// Get vendor earnings summary - Calculate from orders directly
 export const getVendorEarnings = async (vendorId: string): Promise<VendorEarnings> => {
   try {
-    // Fetch from optimized stats document (single read)
+    // Try to get from optimized stats document first
     const stats = await getVendorStats(vendorId);
     
+    // If stats document has data, use it
+    if (stats.totalEarnings > 0 || stats.availableBalance > 0) {
+      return {
+        totalEarnings: stats.totalEarnings,
+        availableBalance: stats.availableBalance,
+        pendingPayouts: stats.pendingPayouts,
+        completedPayouts: stats.completedPayouts,
+        totalOrders: stats.totalOrders
+      };
+    }
+    
+    // Fallback: Calculate directly from orders
+    const ordersQuery = query(
+      collection(db, 'orders'),
+      where('vendors', 'array-contains', vendorId)
+    );
+    
+    const ordersSnapshot = await getDocs(ordersQuery);
+    const orders = ordersSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Order[];
+    
+    let totalEarnings = 0;
+    let availableBalance = 0;
+    
+    orders.forEach(order => {
+      let vendorEarning = 0;
+      
+      // Handle both single-vendor and multi-vendor structures
+      if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+        vendorEarning = (order.vendorEarnings as { [key: string]: number })[vendorId] || 0;
+      } else if (typeof order.vendorEarnings === 'number') {
+        if (order.vendorId === vendorId || order.vendors?.includes(vendorId)) {
+          vendorEarning = order.vendorEarnings;
+        }
+      } else if (order.vendorAmount && (order.vendorId === vendorId || order.vendors?.includes(vendorId))) {
+        vendorEarning = order.vendorAmount;
+      }
+      
+      if (vendorEarning > 0) {
+        totalEarnings += vendorEarning;
+        
+        // Add to available balance if not paid out yet
+        if (!order.paidOutVendors?.includes(vendorId) && !order.isPaidOut) {
+          availableBalance += vendorEarning;
+        }
+      }
+    });
+    
     return {
-      totalEarnings: stats.totalEarnings,
-      availableBalance: stats.availableBalance,
-      pendingPayouts: stats.pendingPayouts,
-      completedPayouts: stats.completedPayouts,
-      totalOrders: stats.totalOrders
+      totalEarnings: Math.round(totalEarnings * 100) / 100,
+      availableBalance: Math.round(availableBalance * 100) / 100,
+      pendingPayouts: 0,
+      completedPayouts: 0,
+      totalOrders: orders.length
     };
   } catch (error) {
     console.error('Error getting vendor earnings:', error);
@@ -91,41 +143,92 @@ export const getEarningsBreakdown = async (vendorId: string): Promise<EarningsBr
       ...doc.data()
     })) as Order[];
 
-    return orders.map(order => ({
-      orderId: order.id,
-      orderDate: order.createdAt,
-      customerName: order.customerName,
-      totalAmount: order.totalAmount,
-      vendorEarnings: order.vendorEarnings?.[vendorId] || 0,
-      commission: order.vendorCommissions?.[vendorId] || 0,
-      status: order.paidOutVendors?.includes(vendorId) ? 'Paid Out' : 'Pending'
-    }));
+    return orders.map(order => {
+      // Safely get vendor earnings
+      let vendorEarning = 0;
+      let vendorCommission = 0;
+      
+      if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+        vendorEarning = (order.vendorEarnings as { [key: string]: number })[vendorId] || 0;
+      }
+      
+      if (typeof order.vendorCommissions === 'object' && order.vendorCommissions !== null) {
+        vendorCommission = (order.vendorCommissions as { [key: string]: number })[vendorId] || 0;
+      }
+      
+      return {
+        orderId: order.id,
+        orderDate: order.createdAt,
+        customerName: order.customerName,
+        totalAmount: order.totalAmount,
+        vendorEarnings: vendorEarning,
+        commission: vendorCommission,
+        status: order.paidOutVendors?.includes(vendorId) ? 'Paid Out' : 'Pending'
+      };
+    });
   } catch (error) {
     console.error('Error getting earnings breakdown:', error);
     throw error;
   }
 };
 
-// Create payout request - OPTIMIZED with stats update
+// Create payout request - Track which orders are being paid out
 export const createPayoutRequest = async (input: PayoutRequestInput): Promise<string> => {
   try {
-    // Validate vendor has sufficient balance
-    const earnings = await getVendorEarnings(input.vendorId);
+    // Get all unpaid orders for this vendor
+    const ordersQuery = query(
+      collection(db, 'orders'),
+      where('vendors', 'array-contains', input.vendorId)
+    );
     
-    if (input.amount > earnings.availableBalance) {
-      throw new Error('Insufficient available balance for payout request');
+    const ordersSnapshot = await getDocs(ordersQuery);
+    const orders = ordersSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Order[];
+    
+    // Calculate available balance and collect unpaid order IDs
+    let availableBalance = 0;
+    const unpaidOrderIds: string[] = [];
+    
+    orders.forEach(order => {
+      let vendorEarning = 0;
+      
+      // Handle both single-vendor and multi-vendor structures
+      if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+        vendorEarning = (order.vendorEarnings as { [key: string]: number })[input.vendorId] || 0;
+      } else if (typeof order.vendorEarnings === 'number') {
+        if (order.vendorId === input.vendorId || order.vendors?.includes(input.vendorId)) {
+          vendorEarning = order.vendorEarnings;
+        }
+      } else if (order.vendorAmount && (order.vendorId === input.vendorId || order.vendors?.includes(input.vendorId))) {
+        vendorEarning = order.vendorAmount;
+      }
+      
+      // Check if not paid out yet
+      if (vendorEarning > 0 && !order.paidOutVendors?.includes(input.vendorId) && !order.isPaidOut) {
+        availableBalance += vendorEarning;
+        unpaidOrderIds.push(order.id);
+      }
+    });
+    
+    // Validate vendor has sufficient balance
+    if (input.amount > availableBalance) {
+      throw new Error(`Insufficient available balance. Available: ₹${availableBalance.toFixed(2)}, Requested: ₹${input.amount.toFixed(2)}`);
     }
 
-    if (input.amount < 100) { // Minimum payout amount
+    if (input.amount < 100) {
       throw new Error('Minimum payout amount is ₹100');
     }
 
-    // Create payout request
+    // Create payout request with order tracking
     const payoutRequest = {
       vendorId: input.vendorId,
       amount: input.amount,
       status: 'pending' as const,
       bankDetails: input.bankDetails,
+      ordersPaidOut: unpaidOrderIds, // Track which orders are being paid
+      totalOrderAmount: availableBalance,
       requestedAt: Timestamp.now()
     };
 

@@ -32,6 +32,7 @@ async function initializeCollections() {
     console.log('📝 Creating platform settings...');
     await setDoc(doc(db, 'settings', 'platform'), {
       commissionPercentage: 10, // 10% platform commission
+      taxPercentage: 18, // 18% GST tax
       currency: 'INR',
       currencySymbol: '₹',
       platformName: 'Multi-Vendor Marketplace',

@@ -49,7 +49,7 @@ export interface Order {
   totalAmount: number;
   commission: number;
   vendorAmount: number;
-  vendorEarnings?: { [vendorId: string]: number }; // Earnings per vendor
+  vendorEarnings?: number | { [vendorId: string]: number }; // Single vendor (number) or multi-vendor (object)
   vendorCommissions?: { [vendorId: string]: number }; // Commission per vendor
   orderStatus: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
@@ -82,6 +82,10 @@ export interface OrderProduct {
 
 export interface Settings {
   commissionPercentage: number;
+  taxPercentage: number;
+  currency: string;
+  currencySymbol: string;
+  platformName: string;
 }
 
 export interface DashboardStats {

@@ -307,7 +307,21 @@ export default function DashboardPage() {
                       {order.customerName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ₹{order.vendorEarnings?.[vendor?.uid || '']?.toFixed(2) || '0.00'}
+                      ₹{(() => {
+                        if (!vendor) return '0.00';
+                        
+                        // Handle both single-vendor and multi-vendor structures
+                        if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+                          return (order.vendorEarnings[vendor.uid] || 0).toFixed(2);
+                        } else if (typeof order.vendorEarnings === 'number') {
+                          if (order.vendorId === vendor.uid || order.vendors?.includes(vendor.uid)) {
+                            return order.vendorEarnings.toFixed(2);
+                          }
+                        } else if (order.vendorAmount && (order.vendorId === vendor.uid || order.vendors?.includes(vendor.uid))) {
+                          return order.vendorAmount.toFixed(2);
+                        }
+                        return '0.00';
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

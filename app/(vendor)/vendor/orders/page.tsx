@@ -195,7 +195,9 @@ export default function OrdersPage() {
                     )}
                   </div>
                   <p className="text-gray-600 mb-1">Customer: {order.customerName || order.customerEmail || 'Unknown Customer'}</p>
-                  <p className="text-gray-600 mb-1">Products: {order.products.length} items</p>
+                  <p className="text-gray-600 mb-1">
+                    Products: {order.products.filter(p => vendor && p.vendorId === vendor.uid).length} items
+                  </p>
                   <p className="text-gray-600 mb-1">Date: {order.createdAt.toLocaleDateString()}</p>
                   {order.trackingNumber && (
                     <p className="text-sm text-blue-600 mt-2">
@@ -206,9 +208,16 @@ export default function OrdersPage() {
 
                 <div className="flex flex-col items-end gap-3">
                   <div className="text-right">
-                    <p className="text-sm text-gray-600">Total Amount</p>
-                    <p className="text-2xl font-bold text-purple-600">₹{order.totalAmount.toFixed(2)}</p>
-                    <p className="text-sm text-gray-600">Your Earnings: ₹{order.vendorAmount.toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">Product Price</p>
+                    <p className="text-xl font-semibold text-gray-800">
+                      ₹{order.products
+                        .filter(p => vendor && p.vendorId === vendor.uid)
+                        .reduce((sum, p) => sum + (p.price * p.quantity), 0)
+                        .toFixed(2)}
+                    </p>
+                    <p className="text-sm text-green-600 mt-1">
+                      Your Earnings: ₹{(order.vendorAmount || 0).toFixed(2)}
+                    </p>
                   </div>
 
                   <div className="flex gap-2">
@@ -238,14 +247,16 @@ export default function OrdersPage() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-gray-100">
-                <p className="text-sm font-semibold text-gray-700 mb-2">Order Items:</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2">Your Products:</p>
                 <div className="space-y-1">
-                  {order.products.map((product, idx) => (
-                    <div key={idx} className="flex justify-between text-sm text-gray-600">
-                      <span>{product.name} x {product.quantity}</span>
-                      <span>₹{(product.price * product.quantity).toFixed(2)}</span>
-                    </div>
-                  ))}
+                  {order.products
+                    .filter(product => vendor && product.vendorId === vendor.uid)
+                    .map((product, idx) => (
+                      <div key={idx} className="flex justify-between text-sm text-gray-600">
+                        <span>{product.name} x {product.quantity}</span>
+                        <span>₹{(product.price * product.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
             </motion.div>
@@ -410,20 +421,22 @@ export default function OrdersPage() {
 
               {/* Product Details */}
               <div className="bg-gray-50 p-4 rounded-xl">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Products Ordered</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Your Products in this Order</h3>
                 <div className="space-y-3">
-                  {selectedOrderForDetails.products.map((product, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-white rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800">{product.name}</p>
-                        <p className="text-sm text-gray-600">Quantity: {product.quantity}</p>
-                        <p className="text-sm text-gray-600">Unit Price: ₹{product.price.toFixed(2)}</p>
+                  {selectedOrderForDetails.products
+                    .filter(product => vendor && product.vendorId === vendor.uid)
+                    .map((product, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-3 bg-white rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{product.name}</p>
+                          <p className="text-sm text-gray-600">Quantity: {product.quantity}</p>
+                          <p className="text-sm text-gray-600">Unit Price: ₹{product.price.toFixed(2)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-purple-600">₹{(product.price * product.quantity).toFixed(2)}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-purple-600">₹{(product.price * product.quantity).toFixed(2)}</p>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
 
@@ -432,16 +445,19 @@ export default function OrdersPage() {
                 <h3 className="text-lg font-semibold text-gray-800 mb-3">Order Summary</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Amount</span>
-                    <span className="font-medium text-gray-900">₹{selectedOrderForDetails.totalAmount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Commission</span>
-                    <span className="font-medium text-gray-900">₹{selectedOrderForDetails.commission.toFixed(2)}</span>
+                    <span className="text-gray-600">Product Price</span>
+                    <span className="font-medium text-gray-900">
+                      ₹{selectedOrderForDetails.products
+                        .filter(p => vendor && p.vendorId === vendor.uid)
+                        .reduce((sum, p) => sum + (p.price * p.quantity), 0)
+                        .toFixed(2)}
+                    </span>
                   </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="font-semibold text-gray-800">Your Earnings</span>
-                    <span className="font-bold text-purple-600">₹{selectedOrderForDetails.vendorAmount.toFixed(2)}</span>
+                    <span className="font-bold text-purple-600">
+                      ₹{(selectedOrderForDetails.vendorAmount || 0).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>

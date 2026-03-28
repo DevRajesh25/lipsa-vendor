@@ -11,6 +11,7 @@ import {
 import { db } from '@/lib/firebase';
 import { DashboardStats, Order, Product } from '@/lib/types';
 import { getVendorStats, initializeVendorStats } from './vendorStatsService';
+import { getPlatformSettings } from './settingsService';
 
 export interface ChartData {
   name: string;
@@ -64,11 +65,15 @@ const calculateStatsFromCollections = async (vendorId: string): Promise<Dashboar
       where('vendors', 'array-contains', vendorId)
     );
     const ordersSnapshot = await getDocs(ordersQuery);
-    const orders = ordersSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate()
-    })) as Order[];
+    
+    const orders = ordersSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate()
+      };
+    }) as Order[];
 
     // Calculate order statistics
     const totalOrders = orders.length;
@@ -82,34 +87,42 @@ const calculateStatsFromCollections = async (vendorId: string): Promise<Dashboar
       o.orderStatus === 'cancelled'
     ).length;
 
-    // Calculate revenue and earnings
-    let totalRevenue = 0;
+    // Calculate earnings from vendor's orders
     let totalEarnings = 0;
     let pendingPayout = 0;
 
     orders.forEach(order => {
-      if (order.paymentStatus === 'paid') {
-        const vendorEarning = order.vendorEarnings?.[vendorId] || 0;
+      let vendorEarning = 0;
+      
+      // Handle both single-vendor and multi-vendor structures
+      if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+        // Multi-vendor: vendorEarnings = { vendorId: amount }
+        vendorEarning = (order.vendorEarnings as { [key: string]: number })[vendorId] || 0;
+      } else if (typeof order.vendorEarnings === 'number') {
+        // Single-vendor: vendorEarnings = amount
+        if (order.vendorId === vendorId || order.vendors?.includes(vendorId)) {
+          vendorEarning = order.vendorEarnings;
+        }
+      } else if (order.vendorAmount && (order.vendorId === vendorId || order.vendors?.includes(vendorId))) {
+        // Fallback to legacy vendorAmount
+        vendorEarning = order.vendorAmount;
+      }
+      
+      // Count all earnings (not just paid orders)
+      if (vendorEarning > 0) {
         totalEarnings += vendorEarning;
         
         // Add to pending payout if not paid out yet
-        if (!order.paidOutVendors?.includes(vendorId)) {
+        if (!order.paidOutVendors?.includes(vendorId) && !order.isPaidOut) {
           pendingPayout += vendorEarning;
         }
       }
-      
-      // Calculate total revenue from vendor's products in the order
-      order.products.forEach(product => {
-        if (product.vendorId === vendorId) {
-          totalRevenue += product.price * product.quantity;
-        }
-      });
     });
 
     const dashboardStats = {
       totalProducts,
       totalOrders,
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalRevenue: Math.round(totalEarnings * 100) / 100,
       pendingOrders,
       completedOrders,
       cancelledOrders,
@@ -143,6 +156,10 @@ const calculateStatsFromCollections = async (vendorId: string): Promise<Dashboar
 // Get last 7 days revenue and orders data for charts
 export const getWeeklyChartData = async (vendorId: string): Promise<ChartData[]> => {
   try {
+    // Fetch platform settings for commission calculation
+    const settings = await getPlatformSettings();
+    const commissionRate = settings.commissionPercentage / 100;
+    
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     
@@ -187,7 +204,9 @@ export const getWeeklyChartData = async (vendorId: string): Promise<ChartData[]>
           // Fallback: calculate from products if vendorEarnings not set
           order.products.forEach(product => {
             if (product.vendorId === vendorId) {
-              vendorEarning += product.price * product.quantity * 0.9; // Assuming 10% commission
+              const productTotal = product.price * product.quantity;
+              const commission = productTotal * commissionRate;
+              vendorEarning += productTotal - commission;
             }
           });
         }

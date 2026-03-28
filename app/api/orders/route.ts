@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, isAdminSDKAvailable } from '@/lib/firebase-admin';
+import { getPlatformSettingsServer } from '@/services/settingsService';
 
 // Interface for order creation input
 interface CreateOrderInput {
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
     }
+
+    // Fetch platform settings for commission calculation
+    const settings = await getPlatformSettingsServer(adminDb);
+    const commissionRate = settings.commissionPercentage / 100; // Convert percentage to decimal
 
     // Create order with inventory update using Admin SDK transaction
     const orderId = await adminDb.runTransaction(async (transaction: any) => {
@@ -174,13 +179,23 @@ export async function POST(request: NextRequest) {
         
         vendorGroups.get(vendorId)!.push(product);
         
-        // Calculate earnings (assuming 10% commission)
+        // Calculate vendor earnings and commission using dynamic commission rate
+        // Example: productPrice = ₹900, quantity = 1, commissionRate = 10%
+        // productTotal = ₹900
+        // commission = ₹90 (commissionRate% of product price)
+        // vendorEarning = ₹810 (product price - commission)
+        // Note: totalAmount includes tax (e.g., ₹1062 = ₹900 + ₹162 tax)
+        // but vendor earnings are calculated on base product price only
         const productTotal = product.price * product.quantity;
-        const commission = productTotal * 0.1; // 10% commission
-        const vendorEarning = productTotal - commission;
+        const commission = Math.round(productTotal * commissionRate * 100) / 100;
+        const vendorEarning = Math.round((productTotal - commission) * 100) / 100;
         
-        vendorEarnings.set(vendorId, vendorEarnings.get(vendorId)! + vendorEarning);
-        vendorCommissions.set(vendorId, vendorCommissions.get(vendorId)! + commission);
+        vendorEarnings.set(vendorId, 
+          Math.round((vendorEarnings.get(vendorId)! + vendorEarning) * 100) / 100
+        );
+        vendorCommissions.set(vendorId, 
+          Math.round((vendorCommissions.get(vendorId)! + commission) * 100) / 100
+        );
       });
 
       // Create order data
@@ -191,15 +206,17 @@ export async function POST(request: NextRequest) {
         customerPhone: body.customerPhone,
         customerAddress: body.customerAddress,
         products,
-        totalAmount,
-        commission: Array.from(vendorCommissions.values()).reduce((sum, c) => sum + c, 0),
-        vendorAmount: Array.from(vendorEarnings.values()).reduce((sum, e) => sum + e, 0),
-        vendorEarnings: Object.fromEntries(vendorEarnings),
-        vendorCommissions: Object.fromEntries(vendorCommissions),
+        totalAmount, // Total amount customer pays (includes tax)
+        commission: Math.round(Array.from(vendorCommissions.values()).reduce((sum, c) => sum + c, 0) * 100) / 100,
+        vendorAmount: Math.round(Array.from(vendorEarnings.values()).reduce((sum, e) => sum + e, 0) * 100) / 100,
+        vendorEarnings: Object.fromEntries(vendorEarnings), // Per-vendor earnings
+        vendorCommissions: Object.fromEntries(vendorCommissions), // Per-vendor commissions
         vendors: Array.from(vendorGroups.keys()),
         orderStatus: 'pending' as const,
         paymentStatus: body.paymentStatus || 'pending',
         paymentMethod: body.paymentMethod,
+        isPaidOut: false,
+        paidOutVendors: [],
         stockUpdatesApplied: true,
         stockRestored: false,
         createdAt: new Date(),
@@ -294,12 +311,19 @@ export async function POST(request: NextRequest) {
  *       "productId": "product_123",
  *       "vendorId": "vendor_456",
  *       "name": "Product Name",
- *       "price": 100,
- *       "quantity": 2,
+ *       "price": 900,        // Base product price
+ *       "quantity": 1,
  *       "image": "https://example.com/image.jpg"
  *     }
  *   ],
- *   "totalAmount": 200,
+ *   "totalAmount": 1062,     // Total customer pays (900 + 162 tax)
  *   "paymentStatus": "paid"
  * }
+ * 
+ * Calculation breakdown:
+ * - Product price: ₹900
+ * - Tax (18%): ₹162
+ * - Total amount (customer pays): ₹1062
+ * - Commission (10% of product price): ₹90
+ * - Vendor earnings: ₹810 (product price - commission)
  */

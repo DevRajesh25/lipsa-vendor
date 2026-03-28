@@ -1,4 +1,5 @@
 import { OrderProduct } from '@/lib/types';
+import { getPlatformSettings } from '@/services/settingsService';
 
 /**
  * Utility functions for order management
@@ -71,9 +72,16 @@ export const cartItemsToOrderProducts = (cartItems: CartItem[]): OrderProduct[] 
 };
 
 /**
- * Calculates order totals
+ * Calculates order totals with tax
+ * Fetches tax rate from platform settings
+ * Example: Product price ₹900, tax rate 18%
+ * - Subtotal: ₹900
+ * - Tax (18% GST): ₹162
+ * - Total: ₹1062 (customer pays this)
+ * - Commission (from settings, e.g., 10% of subtotal): ₹90
+ * - Vendor earnings: ₹810 (subtotal - commission)
  */
-export const calculateOrderTotals = (cartItems: CartItem[]) => {
+export const calculateOrderTotals = async (cartItems: CartItem[]) => {
   const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
   // Group by vendor for multi-vendor calculations
@@ -87,10 +95,14 @@ export const calculateOrderTotals = (cartItems: CartItem[]) => {
 
   const vendorCount = Object.keys(vendorTotals).length;
   
-  // You can add shipping, tax calculations here
+  // Fetch platform settings for dynamic tax rate
+  const settings = await getPlatformSettings();
+  const taxRate = settings.taxPercentage / 100; // Convert percentage to decimal
+  
+  // Calculate shipping and tax
   const shipping = 0; // Free shipping for now
-  const tax = 0; // No tax for now
-  const total = subtotal + shipping + tax;
+  const tax = Math.round(subtotal * taxRate * 100) / 100;
+  const total = Math.round((subtotal + shipping + tax) * 100) / 100;
 
   return {
     subtotal,
@@ -125,8 +137,8 @@ export const createOrder = async (orderData: {
       };
     }
 
-    // Calculate totals
-    const { total } = calculateOrderTotals(orderData.cartItems);
+    // Calculate totals (now async)
+    const { total } = await calculateOrderTotals(orderData.cartItems);
 
     // Convert cart items to order products
     const products = cartItemsToOrderProducts(orderData.cartItems);

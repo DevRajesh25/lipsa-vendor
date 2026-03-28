@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Package, ShoppingBag, Settings, LogOut, Menu, X, Archive, RotateCcw, Tag, Star, DollarSign, Wallet, BarChart3, Bell, Upload, MessageSquare, Video } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Settings, LogOut, Menu, X, Archive, RotateCcw, Tag, Star, DollarSign, Wallet, Bell, Upload, MessageSquare, Video } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { logoutVendor } from '@/services/authService';
@@ -25,7 +25,6 @@ const menuItems = [
   { href: '/vendor/reviews', label: 'Reviews', icon: Star },
   { href: '/vendor/earnings', label: 'Earnings', icon: DollarSign },
   { href: '/vendor/payouts', label: 'Payout Requests', icon: Wallet },
-  { href: '/vendor/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/vendor/bulk-upload', label: 'Bulk Upload', icon: Upload },
   { href: '/vendor/support', label: 'Support Tickets', icon: MessageSquare },
   { href: '/vendor/notifications', label: 'Notifications', icon: Bell },

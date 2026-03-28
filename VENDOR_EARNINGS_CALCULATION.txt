@@ -1,0 +1,61 @@
+VENDOR EARNINGS CALCULATION SYSTEM
+===================================
+
+CALCULATION FORMULA:
+-------------------
+For a product with price ₹900:
+
+1. Product Price: ₹900 (base price)
+2. Tax (18% GST): ₹162 (calculated on product price)
+3. Total Amount: ₹1062 (customer pays this = product + tax)
+4. Commission (10%): ₹90 (calculated on product price only, NOT on tax)
+5. Vendor Earnings: ₹810 (product price - commission)
+
+KEY POINTS:
+-----------
+✓ Tax is calculated on the product price (18% GST)
+✓ Customer pays: Product Price + Tax
+✓ Commission (10%) is calculated on product price only, NOT including tax
+✓ Vendor earnings = Product Price - Commission
+✓ Tax goes to government, not included in vendor earnings or commission
+
+IMPLEMENTATION:
+---------------
+1. Order Creation (app/api/orders/route.ts):
+   - Calculates vendor earnings per vendor
+   - Stores in vendorEarnings[vendorId] field
+   - Stores commission in vendorCommissions[vendorId] field
+   - Properly rounds all amounts to 2 decimal places
+
+2. Dashboard (services/dashboardService.ts):
+   - Shows total earnings from vendorEarnings field
+   - Only counts earnings from paid orders
+   - Calculates pending payout (earnings not yet paid out)
+
+3. Earnings Page (app/(vendor)/vendor/earnings/page.tsx):
+   - Displays total earnings per vendor
+   - Shows commission breakdown
+   - Lists pending payouts
+
+4. Order Totals (lib/utils/orderUtils.ts):
+   - Calculates 18% GST on subtotal
+   - Adds tax to get total amount customer pays
+
+EXAMPLE ORDER:
+--------------
+{
+  "totalAmount": 1062,      // Customer pays (includes tax)
+  "productPrice": 900,      // Base product price
+  "tax": 162,               // 18% GST
+  "commission": 90,         // 10% of product price
+  "vendorAmount": 810,      // Vendor earnings (product - commission)
+  "paymentStatus": "paid",
+  "orderStatus": "completed",
+  "payoutStatus": "pending",
+  "vendorId": "vendor_1"
+}
+
+TESTING:
+--------
+Run: node test-vendor-earnings-calculation.js
+This will show example calculations for different scenarios.

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, isAdminSDKAvailable } from '@/lib/firebase-admin';
 import { Order } from '@/lib/types';
+import { getPlatformSettingsServer } from '@/services/settingsService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +17,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('Fetching orders for vendor:', vendorId);
+
+    // Fetch platform settings for commission calculation
+    const settings = await getPlatformSettingsServer(adminDb);
+    const commissionRate = settings.commissionPercentage / 100; // Convert percentage to decimal
 
     // Try both new multi-vendor structure and legacy single-vendor structure
     const queries = [
@@ -70,14 +75,25 @@ export async function GET(request: NextRequest) {
       // Get vendor-specific earnings from vendorEarnings map
       const vendorEarnings = data.vendorEarnings || {};
       const vendorCommissions = data.vendorCommissions || {};
-      const vendorAmount = vendorEarnings[vendorId] || 0;
-      const vendorCommission = vendorCommissions[vendorId] || 0;
       
-      // Calculate vendor-specific total
+      // Calculate vendor-specific total from products
       const vendorTotal = vendorProducts.reduce(
         (sum: number, product: any) => sum + (product.price * product.quantity), 
         0
       );
+      
+      // Get vendorAmount from vendorEarnings map, or calculate it if not present
+      let vendorAmount = vendorEarnings[vendorId] || 0;
+      let vendorCommission = vendorCommissions[vendorId] || 0;
+      
+      // Fallback: If vendorAmount is 0 but we have products, calculate it
+      if (vendorAmount === 0 && vendorTotal > 0) {
+        // Calculate commission using dynamic commission rate from settings
+        vendorCommission = Math.round(vendorTotal * commissionRate * 100) / 100;
+        // Calculate vendor earnings (product total - commission)
+        vendorAmount = Math.round((vendorTotal - vendorCommission) * 100) / 100;
+        console.log(`Calculated vendorAmount for ${vendorId}: ₹${vendorAmount} (total: ₹${vendorTotal}, commission: ₹${vendorCommission}, rate: ${settings.commissionPercentage}%)`);
+      }
       
       // Check if this vendor has been paid out
       const paidOutVendors = data.paidOutVendors || [];
