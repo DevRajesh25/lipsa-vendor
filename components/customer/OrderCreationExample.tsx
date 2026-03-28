@@ -10,6 +10,14 @@ import { CartItem, calculateOrderTotals, formatOrderStatus } from '@/lib/utils/o
 export const OrderCreationExample: React.FC = () => {
   const { createOrder, loading, error, clearError } = useOrders();
   const [orderResult, setOrderResult] = useState<{ orderId?: string; success: boolean } | null>(null);
+  const [totals, setTotals] = useState({
+    subtotal: 0,
+    shipping: 0,
+    tax: 0,
+    total: 0,
+    vendorTotals: {},
+    vendorCount: 0
+  });
 
   // Example cart items
   const [cartItems] = useState<CartItem[]>([
@@ -42,7 +50,14 @@ export const OrderCreationExample: React.FC = () => {
     customerPhone: '+1234567890'
   });
 
-  const totals = calculateOrderTotals(cartItems);
+  // Calculate totals when component mounts or cart changes
+  React.useEffect(() => {
+    const loadTotals = async () => {
+      const calculatedTotals = await calculateOrderTotals(cartItems);
+      setTotals(calculatedTotals);
+    };
+    loadTotals();
+  }, [cartItems]);
 
   const handleCreateOrder = async () => {
     clearError();
