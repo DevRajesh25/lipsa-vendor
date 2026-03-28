@@ -12,7 +12,7 @@ import {
 } from '../services/earningsService';
 
 // Test earnings calculation
-function testEarningsCalculation() {
+async function testEarningsCalculation() {
   console.log('🧮 Testing Earnings Calculation...\n');
 
   const testCases = [
@@ -22,11 +22,11 @@ function testEarningsCalculation() {
     { orderAmount: 99.99, expectedCommission: 10, expectedEarnings: 89.99 }
   ];
 
-  testCases.forEach((testCase, index) => {
-    const commission = calculateCommission(testCase.orderAmount);
-    const earnings = calculateVendorEarnings(testCase.orderAmount);
+  for (const testCase of testCases) {
+    const commission = await calculateCommission(testCase.orderAmount);
+    const earnings = await calculateVendorEarnings(testCase.orderAmount);
 
-    console.log(`Test Case ${index + 1}:`);
+    console.log(`Test Case ${testCases.indexOf(testCase) + 1}:`);
     console.log(`  Order Amount: ₹${testCase.orderAmount}`);
     console.log(`  Commission: ₹${commission} (Expected: ₹${testCase.expectedCommission})`);
     console.log(`  Vendor Earnings: ₹${earnings} (Expected: ₹${testCase.expectedEarnings})`);
@@ -37,11 +37,11 @@ function testEarningsCalculation() {
     console.log(`  ✅ Commission: ${commissionMatch ? 'PASS' : 'FAIL'}`);
     console.log(`  ✅ Earnings: ${earningsMatch ? 'PASS' : 'FAIL'}`);
     console.log('');
-  });
+  }
 }
 
 // Test multi-vendor order calculation
-function testMultiVendorOrder() {
+async function testMultiVendorOrder() {
   console.log('🏪 Testing Multi-Vendor Order Calculation...\n');
 
   const multiVendorOrder = {
@@ -58,12 +58,12 @@ function testMultiVendorOrder() {
   const vendorCommissions: { [vendorId: string]: number } = {};
 
   // Calculate per vendor
-  multiVendorOrder.products.forEach(product => {
+  for (const product of multiVendorOrder.products) {
     const vendorTotal = product.price * product.quantity;
     vendorTotals[product.vendorId] = vendorTotal;
-    vendorCommissions[product.vendorId] = calculateCommission(vendorTotal);
-    vendorEarnings[product.vendorId] = calculateVendorEarnings(vendorTotal);
-  });
+    vendorCommissions[product.vendorId] = await calculateCommission(vendorTotal);
+    vendorEarnings[product.vendorId] = await calculateVendorEarnings(vendorTotal);
+  }
 
   console.log('Multi-Vendor Order Breakdown:');
   console.log(`Total Order Amount: ₹${multiVendorOrder.totalAmount}`);
@@ -131,9 +131,9 @@ async function runTests() {
   console.log('=' .repeat(60));
   
   try {
-    testEarningsCalculation();
+    await testEarningsCalculation();
     console.log('=' .repeat(60));
-    testMultiVendorOrder();
+    await testMultiVendorOrder();
     console.log('=' .repeat(60));
     testPayoutValidation();
     console.log('=' .repeat(60));

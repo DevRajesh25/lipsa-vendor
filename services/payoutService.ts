@@ -45,11 +45,18 @@ export const calculatePayoutForOrders = async (
         if (
           order.vendors.includes(vendorId) && 
           order.paymentStatus === 'paid' &&
-          order.vendorEarnings?.[vendorId] &&
           (!order.paidOutVendors || !order.paidOutVendors.includes(vendorId))
         ) {
-          totalEarnings += order.vendorEarnings[vendorId];
-          validOrderIds.push(orderId);
+          // Safely get vendor earnings
+          let vendorEarning = 0;
+          if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+            vendorEarning = (order.vendorEarnings as { [key: string]: number })[vendorId] || 0;
+          }
+          
+          if (vendorEarning > 0) {
+            totalEarnings += vendorEarning;
+            validOrderIds.push(orderId);
+          }
         }
       }
     }
@@ -111,7 +118,12 @@ export const createPayoutRequestWithOrders = async (
           continue;
         }
 
-        const vendorEarning = order.vendorEarnings?.[vendorId] || 0;
+        // Safely get vendor earnings
+        let vendorEarning = 0;
+        if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+          vendorEarning = (order.vendorEarnings as { [key: string]: number })[vendorId] || 0;
+        }
+        
         if (runningTotal + vendorEarning <= amount) {
           runningTotal += vendorEarning;
           finalOrderIds.push(order.id);

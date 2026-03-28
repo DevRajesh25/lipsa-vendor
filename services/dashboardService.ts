@@ -198,8 +198,8 @@ export const getWeeklyChartData = async (vendorId: string): Promise<ChartData[]>
         let vendorEarning = 0;
         
         // Calculate vendor earnings from this order
-        if (order.vendorEarnings?.[vendorId]) {
-          vendorEarning = order.vendorEarnings[vendorId];
+        if (typeof order.vendorEarnings === 'object' && order.vendorEarnings !== null) {
+          vendorEarning = (order.vendorEarnings as { [key: string]: number })[vendorId] || 0;
         } else {
           // Fallback: calculate from products if vendorEarnings not set
           order.products.forEach(product => {
